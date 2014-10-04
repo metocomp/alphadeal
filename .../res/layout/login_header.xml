@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:orientation="vertical"
+    >
+    <RelativeLayout 
+        android:layout_width="match_parent"
+    	android:layout_height="match_parent"
+    	android:background="@color/white"
+    	android:orientation="vertical"
+    	android:id="@+id/layout"
+        >
+        
+    <ImageView
+        android:id="@+id/logo"
+        android:layout_alignParentTop="true"
+        android:layout_width="75dp"
+        android:layout_height="75dp"
+        android:src="@drawable/chatcopy"
+        android:scaleType="centerCrop"
+        android:layout_centerHorizontal="true"/>
+    
+    <TextView
+        android:id="@+id/country_text"
+        android:layout_below="@+id/logo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dip"
+        android:textColor="#222222"
+        android:layout_marginLeft="23dp"
+        android:layout_marginRight="23dp"
+        android:textSize="@dimen/navbar_button_text_size" 
+        android:text="Select your country"
+        android:textAppearance="?android:attr/textAppearanceLarge" />
+ 
+    <Spinner
+        android:layout_below="@+id/country_text"
+        android:id="@+id/country_spinner"
+        android:layout_width="fill_parent"
+        android:layout_marginLeft="23dp"
+        android:layout_marginRight="23dp"
+        android:textSize="20sp"
+        android:layout_marginTop="10dp"
+        android:textColor="#222222"
+        android:layout_height="wrap_content"/>
+        
+    <EditText
+        android:layout_below="@+id/editTextAccount"
+        android:id="@+id/editTextPassword"
+        android:layout_width="match_parent"
+        android:layout_marginLeft="23dp"
+        android:layout_marginRight="23dp"
+        android:layout_marginTop="10dp"
+        android:layout_height="55dp"
+        android:hint="@string/password"
+        android:textColorHint="#8f8f8f"
+        android:textColor="#222222"
+        android:textSize="18sp" 
+        android:inputType="textPassword"
+        >
+    </EditText>
+    
+    <Button 
+        android:layout_below="@+id/editTextPassword"
+        android:layout_marginTop="20dp"
+        android:id="@+id/loginButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/login"
+        android:onClick="ButtonClick"
+        android:background="@drawable/red_button"
+        style="@style/button_text"
+        />
+
+	<EditText
+	    android:id="@+id/editTextAccount"
+	    android:layout_width="match_parent"
+	    android:layout_height="55dp"
+	    android:layout_alignLeft="@+id/editTextPassword"
+	    android:layout_below="@+id/country_spinner"
+	    android:layout_marginTop="14dp"
+	    android:layout_marginRight="23dp"
+	    android:ems="10"
+	    android:hint="@string/account"
+	    android:textColor="#222222"
+	    android:textColorHint="#8f8f8f"
+	    android:textSize="18sp" 
+	    android:inputType="phone"
+	    />
+
+	<Button
+	    android:id="@+id/registerButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+	    android:layout_alignLeft="@+id/loginButton"
+	    android:layout_alignRight="@+id/loginButton"
+	    android:layout_below="@+id/loginButton"
+	    android:layout_marginTop="22dp"
+	    android:onClick="ButtonClick"
+	    android:text="@string/signup"
+	    android:textSize="20sp"
+        android:background="@drawable/red_button"
+	    style="@style/button_text"
+	    />
+	
+	<Button
+	    android:id="@+id/forgotPasswordButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+	    android:layout_alignLeft="@+id/loginButton"
+	    android:layout_alignRight="@+id/loginButton"
+	    android:layout_below="@+id/registerButton"
+	    android:layout_marginTop="22dp"
+	    android:onClick="ButtonClick"
+	    android:text="@string/forgot_password"
+	    android:textSize="20sp"
+        android:background="@drawable/red_button"
+	    style="@style/button_text"
+	    />
+
+    </RelativeLayout>
+    
+</RelativeLayout>
