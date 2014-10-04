@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 
 import tools.UIHelper;
+import android.R.string;
 import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.DialogInterface;
@@ -32,6 +33,7 @@ import android.widget.AbsListView;
 import android.widget.AbsListView.OnScrollListener;
 import android.widget.ListAdapter;
 import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.i18n.phonenumbers.NumberParseException;
@@ -66,6 +68,7 @@ public class FindFriend extends AppActivity implements OnScrollListener, OnRefre
 //	private List<UserInfo> registeredData;
 //	private StrangerAdapter registeredAdapter;
 	private SwipeRefreshLayout swipeLayout;
+	private TextView titleView;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -76,6 +79,7 @@ public class FindFriend extends AppActivity implements OnScrollListener, OnRefre
 	}
 	
 	private void initUI() {
+		titleView = (TextView) findViewById(R.id.titleBarView);
 		swipeLayout = (SwipeRefreshLayout) findViewById(R.id.xrefresh);
 		swipeLayout.setOnRefreshListener(this);
 	    swipeLayout.setColorScheme(android.R.color.holo_blue_bright, 
@@ -104,6 +108,7 @@ public class FindFriend extends AppActivity implements OnScrollListener, OnRefre
 	}
 	
 	private void findFriend(final int page, String nickName, final int action) {
+		titleView.setText("Loading contacts. You can come back later...");
 		final String apiKey = appContext.getLoginApiKey();
 		ApiClent.findFriend(appContext, apiKey, page+"", UIHelper.LISTVIEW_COUNT+"", nickName, new ClientCallback() {
 			@Override
@@ -114,6 +119,7 @@ public class FindFriend extends AppActivity implements OnScrollListener, OnRefre
 					ApiClent.getMyFriend(appContext, apiKey, page+"", UIHelper.LISTVIEW_COUNT+"", new ClientCallback() {
 						@Override
 						public void onSuccess(Object data) {
+							titleView.setText(R.string.main_find_friend);
 							StrangerEntity myFriendsEntity = (StrangerEntity)data;
 							switch (myFriendsEntity.status) {
 							case 1:
@@ -127,11 +133,14 @@ public class FindFriend extends AppActivity implements OnScrollListener, OnRefre
 						
 						@Override
 						public void onFailure(String message) {
-							showToast(message);
+							showToast("Please drag down to refresh");
+							titleView.setText("Please drag down to refresh");
 						}
 						
 						@Override
 						public void onError(Exception e) {
+							showToast("Please drag down to refresh");
+							titleView.setText("Please drag down to refresh");
 						}
 					});
 					

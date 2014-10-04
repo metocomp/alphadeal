@@ -4,7 +4,7 @@
 
     <string name="main_wechat">Chat</string>
     <string name="main_friend">My Friends</string>
-    <string name="main_find_friend">My Contacts</string>
+    <string name="main_find_friend">My Contacts (Drag down to refresh)</string>
     <string name="main_me">Settings</string>
     
     <!-- 网络和内存卡提示 -->
