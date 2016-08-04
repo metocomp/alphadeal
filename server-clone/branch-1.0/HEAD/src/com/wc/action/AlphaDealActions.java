@@ -21,6 +21,7 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import com.google.common.util.concurrent.FutureCallback;
@@ -30,11 +31,9 @@ import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.wc.bean.AlphaDealUser;
 import com.wc.dao.AlphaDealUserDAO;
+import com.wc.jpa.EntityManagerHelper;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 
 @Produces("application/json;charset=UTF-8")
@@ -46,12 +45,15 @@ public class AlphaDealActions {
 	public static final String androidVersion="1.0.0";
 	public static final String iosVersion="4.0.0";
 	private static final long RUN_TIMEOUT = 1000 * 60 * 60 * 10; // 10 hours
-	private final String USER_AGENT = "Mozilla/5.0";
+	private static final String PER_ZIP = "perzip";
 
 	/** {product}, {nearby} */
 	private static final String TARGET_URL = "https://api.target.com/available_to_promise/v2/%s/"
 			+ "search?key=adaptive-pdp&nearby=%s&inventory_type=stores&multichannel_option=none&"
 			+ "field_groups=location_summary&requested_quantity=1&radius=100";
+	/** {loationId}, {UDPC#} */
+	private static final String TARGET_PRICE_URL = "http://brickseek.com/local-target-item.php?"
+			+ "s=%s&sku=%s&q=1&q1=1";
 
 	private String item;
 	private String upc;
@@ -84,39 +86,22 @@ public class AlphaDealActions {
 				+ "?maxResults=1&key=AmV3iQQoSXvLS4UkW5zDQdzjGBUZlEe6UQOHLHSpyPXFNQTFsXAwno8xPbGCHnc_";
 		try {
 			URL obj = new URL(url);
-			HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-	
-			// optional default is GET
-			con.setRequestMethod("GET");
-	
-			//add request header
-			con.setRequestProperty("User-Agent", USER_AGENT);
-	
-			int responseCode = con.getResponseCode();
-			switch (responseCode) {
-		        case 200:
-		        case 201:
-		            BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream()));
-		            StringBuilder sb = new StringBuilder();
-		            String line;
-		            while ((line = br.readLine()) != null) {
-		                sb.append(line);
-		            }
-		            br.close();
-		            String s = sb.toString().replaceAll("http.?", "")
-		            		.replaceAll(".?\\/", "")
-		            		.replace('©', ' ');
-		            JSONObject json = new JSONObject(s);
-		            Location location = new Location();
-		            JSONArray resourcesSet = json.getJSONArray("resourceSets");
-		            JSONArray resources = resourcesSet.getJSONObject(0).getJSONArray("resources");
-		            JSONArray bboxs = resources.getJSONObject(0).getJSONArray("bbox");
-		            location.lat = (bboxs.getDouble(0) + bboxs.getDouble(2)) / 2;
-		            location.lng = (bboxs.getDouble(1) + bboxs.getDouble(3)) / 2;
-		            return location;
-		         default:
-		        	 logger.warning("failed from location response code:" + responseCode); 
+			String response = AlphadealHttpClient.sendGetRequest(obj);
+			if (response == null) {
+				 logger.warning("failed from location get location beause the response is null");
+				 return null;
 			}
+            String s = response.replaceAll("http.?", "")
+            		.replaceAll(".?\\/", "")
+            		.replace('©', ' ');
+            JSONObject json = new JSONObject(s);
+            Location location = new Location();
+            JSONArray resourcesSet = json.getJSONArray("resourceSets");
+            JSONArray resources = resourcesSet.getJSONObject(0).getJSONArray("resources");
+            JSONArray bboxs = resources.getJSONObject(0).getJSONArray("bbox");
+            location.lat = (bboxs.getDouble(0) + bboxs.getDouble(2)) / 2;
+            location.lng = (bboxs.getDouble(1) + bboxs.getDouble(3)) / 2;
+            return location;
 		} catch (Exception e) {
 			logger.warning("failed from location:" + e);
 		}
@@ -124,82 +109,61 @@ public class AlphaDealActions {
 	}
 	
 	// Gets the store jsons with the location and item id.
-	private JSONObject getTargetStoreData(String item, String zip) throws Exception {
-		if (zip == null) {
-			logger.warning("zip is null");
-		}
-
-		String url = String.format(TARGET_URL, item, zip);
-		
-		URL obj = new URL(url);
-		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-
-		// optional default is GET
-		con.setRequestMethod("GET");
-
-		//add request header
-		con.setRequestProperty("User-Agent", USER_AGENT);
-
-		int responseCode = con.getResponseCode();
-		switch (responseCode) {
-	        case 200:
-	        case 201:
-	            BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream()));
-	            StringBuilder sb = new StringBuilder();
-	            String line;
-	            while ((line = br.readLine()) != null) {
-	                sb.append(line);
-	            }
-	            br.close();
-	            String s = sb.toString();
-	            if (s.startsWith("[")) {
-	            	s = sb.toString().substring(1, sb.length() - 1);
-	            }
-//	            System.out.println("data: " + s);  
-	            return new JSONObject(s);
-	         default:
-	        	break; 
+	private JSONObject getTargetStoreData(String item, String zip) {
+		try {
+			if (zip == null) {
+				logger.warning("zip is null");
+				return null;
+			}
+	
+			String url = String.format(TARGET_URL, item, zip);
+			
+			URL obj = new URL(url);
+			String response = AlphadealHttpClient.sendGetRequest(obj);
+			if (response == null) {
+				 logger.warning("failed from getting target stores beause the response is null");
+				 return null;
+			}
+	        if (response.startsWith("[")) {
+	        	response = response.substring(1, response.length() - 1);
+	        }
+	//	            System.out.println("data: " + s);  
+	        return new JSONObject(response);
+		} catch (Exception e) {
+			logger.log(Level.WARNING, "Failed to get target store data", e);
 		}
 		return null;
 	}
 	
 	// Gets the store jsons with the location and item id.
-	private JSONObject getWalmartStoreData(String item, Location location) throws Exception {
-		if (location == null) {
-			logger.warning("location is null");
-		}
-
-		String url = "https://mobile.walmart.com/m/j?service=Slap&method=getByItemsAndLatLong&p1=[" + item
-				+ "]&p2=" + location.lat + "&p3=" + location.lng + "&p4=c4tch4spyder&version=3&e=1";
-		
-		URL obj = new URL(url);
-		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
-
-		// optional default is GET
-		con.setRequestMethod("GET");
-
-		//add request header
-		con.setRequestProperty("User-Agent", USER_AGENT);
-
-		int responseCode = con.getResponseCode();
-		switch (responseCode) {
-	        case 200:
-	        case 201:
-	            BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream()));
-	            StringBuilder sb = new StringBuilder();
-	            String line;
-	            while ((line = br.readLine()) != null) {
-	                sb.append(line);
-	            }
-	            br.close();
-	            String s = sb.toString();
-	            if (s.startsWith("[")) {
-	            	s = sb.toString().substring(1, sb.length() - 1);
-	            }
-//	            System.out.println("data: " + s);  
-	            return new JSONObject(s);
-	         default:
-	        	break; 
+	private JSONObject getWalmartStoreData(String item, Location location) {
+		String response = "{}";
+		try {
+			if (location == null) {
+				logger.warning("location is null");
+				return null;
+			}
+	
+			String url = "https://mobile.walmart.com/m/j?service=Slap&method=getByItemsAndLatLong&p1=[" + item
+					+ "]&p2=" + location.lat + "&p3=" + location.lng + "&p4=c4tch4spyder&version=3&e=1";
+			
+			URL obj = new URL(url);
+			response = AlphadealHttpClient.sendGetRequest(obj);
+			if (response == null) {
+				 logger.warning("failed from location get location beause the response is null");
+				 return null;
+			}
+	        if (response.startsWith("[")) {
+	        	response = response.substring(1, response.length() - 1);
+	        } else {
+	        	logger.log(Level.WARNING, "null response from walmart: " + response);
+	        }
+	        if (!response.startsWith("{")) {
+	        	return null;
+	        }
+	        return new JSONObject(response);
+		} catch (Exception e) {
+			logger.log(Level.WARNING, "Failed to get walmart store data response : " + response, e);
 		}
 		return null;
 	}
@@ -208,11 +172,12 @@ public class AlphaDealActions {
 	 * Sends batch records in the size of 1000. The pageToken is used to identify the chunks. Once finished
 	 * 'finished' bit is set.
 	 */
-	private void sendResult(Map<String, JSONObject> storesMap) throws Exception {
+	private void sendResult(Map<String, JSONObject> storesMap, StoreType storeType) throws Exception {
 		Collection<JSONObject> allValues = storesMap.values();
 		int size = allValues.size();
 		logger.info("All size: " + size);
 		JSONObject res = new JSONObject();
+		res.put("type", storeType.name());
 		if (size > 1000) {
 			res.put("partial", "true");
 			res.put("pageToken", UUID.randomUUID());
@@ -229,9 +194,39 @@ public class AlphaDealActions {
 				Thread.sleep(10000);
 			}
 		} else {
+			res.put("finished", "true");
 			JSONObject[] objArr = allValues.toArray(new JSONObject[size]);
 			sendPartialResult(objArr, res);
 		}
+		if (res.has("finished")) {
+			// Close connection
+			EntityManagerHelper.closeEntityManager();
+		}
+	}
+	
+	private String getTargetPrice(String location, String item) throws MalformedURLException {
+		String url = String.format(TARGET_PRICE_URL, location, item);
+		URL obj = new URL(url);
+		String response = AlphadealHttpClient.sendGetRequest(obj);
+		if (response == null) {
+			 logger.warning("failed from getting target price beause the response is null");
+			 return null;
+		}
+		return parsePrice(response);
+	}
+	
+	private String parsePrice(String response) {
+		int start = response.indexOf("$");
+		int end = response.indexOf("<", start);
+		int strikeIndex = response.indexOf("</strike>", start);
+		if (strikeIndex - end <= 1) {
+			start = strikeIndex + "</strike>".length() + 1;
+			end = response.indexOf("<", start);
+		}
+		if (start >= 0 && end > start) {
+			return response.substring(start, end);
+		}
+		return "";
 	}
 	
 	// Sends the result back to web app.
@@ -240,16 +235,6 @@ public class AlphaDealActions {
 		// Reset the bit
 		user.setRunning(0);
 		uDao.update(user);
-		String url="https://script.google.com/macros/s/AKfycbwYLOqsych0STQVsrtKo6-f0vEEZIheGfq4S60yllYtgaVX5KQ/exec";
-		URL object=new URL(url);
-
-		HttpURLConnection con = (HttpURLConnection) object.openConnection();
-		con.setDoOutput(true);
-		con.setDoInput(true);
-		con.setRequestProperty("Content-Type", "application/json");
-		con.setRequestProperty("Accept", "application/json");
-		con.setRequestMethod("POST");
-
 		try {
 			res.put("item", item);
 			res.put("upc", upc);
@@ -260,29 +245,22 @@ public class AlphaDealActions {
 			logger.info("Getting error" + e);
 		}
 		logger.info("item :" + item + "\n"  
-//				+ "partial: " + res.get("partial") + "\n"
+				+ "user: " + userId + "\n"
 				+ "upc :" + upc + "\n" 
 				+ "isTrigger :" + isTrigger + "\n"
-				+ "store size:" + stores.length);  
-		OutputStreamWriter wr = new OutputStreamWriter(con.getOutputStream());
-		wr.write(res.toString());
-		wr.flush();
+				+ "store size:" + stores.length); 
+		// Send the post request.
+		String url = "https://script.google.com/macros/s/AKfycbwYLOqsych0STQVsrtKo6-f0vEEZIheGfq4S60yllYtgaVX5KQ/exec";
+		URL object = new URL(url);
+		String response = AlphadealHttpClient.sendPostRequest(object, res);
 
 		//display what returns the POST request
 
-		StringBuilder sb = new StringBuilder();  
-		int HttpResult = con.getResponseCode(); 
-		if (HttpResult == HttpURLConnection.HTTP_OK) {
-		    BufferedReader br = new BufferedReader(
-		            new InputStreamReader(con.getInputStream(), "utf-8"));
-		    String line = null;  
-		    while ((line = br.readLine()) != null) {  
-		        sb.append(line + "\n");  
-		    }
-		    br.close();
-		    logger.info("Post response from web app:" + sb.toString());  
+		if (response != null) {
+		    
+		    logger.info("Post response from web app:" + response);  
 		} else {
-		    logger.warning(con.getResponseMessage());  
+		    logger.warning("null response from post: " + url);  
 		}  
 	}
 	
@@ -295,8 +273,34 @@ public class AlphaDealActions {
 			@FormParam("user")String userInput,
 			@FormParam("isTrigger")String isTrigger,
 			@FormParam("type")String storeType) throws Exception {
+		
 		JSONObject res = new JSONObject();
-		this.item = item;
+		StoreType type = storeType.equals("target") ? StoreType.TARGET : StoreType.WALMART;
+		if (type == StoreType.WALMART) {
+			this.item = item;
+		} else {
+			// Parse the item number to 056-01-0170 format
+			StringBuilder sb = new StringBuilder();
+			int index = 0;
+			if (item.length() != 9) {
+				int zerosToAdd = 9 - item.length();
+				while (index < zerosToAdd) {
+					if (index == 3 || index == 5) {
+						sb.append("-");
+					}
+					sb.append("0");
+					index++;
+				}
+			}
+			for (int i = 0; i < item.length(); i++){
+				if (index == 3 || index == 5) {
+					sb.append("-");
+				}
+				sb.append(item.charAt(i));
+				index++;
+			}
+			this.item = sb.toString();
+		}
 		this.userId = userInput;
 		this.isTrigger = isTrigger;
 		user = uDao.findById(userInput);
@@ -306,28 +310,59 @@ public class AlphaDealActions {
 			return res.toString();
 		}
 		user.setLastRun(new Timestamp(System.currentTimeMillis()));
-		StoreType type = storeType.equals("target") ? StoreType.TARGET : StoreType.WALMART;
 		// Starting a scan asynchronously.
-		new Thread(new ScanRunnable(zips, type)).start();
-		
-		return res.toString();
+		ListenableFuture<List<Map<String, JSONObject>>> result = new ScanAsyncFunc(zips, type).call();
+		if (isTrigger.equals(PER_ZIP)) {
+			List<JSONObject> zipToStoresMap = new ArrayList<JSONObject>();
+			for (Map<String, JSONObject> m : result.get()) {
+				for (Map.Entry<String, JSONObject> e : m.entrySet()) {
+					JSONObject eachZipRecord = new JSONObject();
+					eachZipRecord.put("zip", e.getKey());
+					eachZipRecord.put("storesPerZip", e.getValue());
+					zipToStoresMap.add(eachZipRecord);
+				}
+			}
+			logger.info("result in per zip: " + res.toString());
+			return returnResultImmediately(zipToStoresMap, res).toString();
+		} else {
+			logger.info("result in per zip: " + res.toString());
+			return res.toString();
+		}
 	}
 	
-	private class ScanRunnable implements Runnable {
+	private JSONObject returnResultImmediately(List<JSONObject> zipToStoresMap, JSONObject res) {
+		try {
+			// Reset the bit
+			user.setRunning(0);
+			uDao.update(user);
+			res.put("item", item);
+			res.put("upc", upc);
+			res.put("stores", zipToStoresMap);
+			res.put("user", userId);
+			res.put("isTrigger", isTrigger);
+		} catch (Exception e) {
+			logger.info("Getting error" + e);
+		} finally {
+			EntityManagerHelper.closeEntityManager();
+		}
+		return res;
+	}
+	
+	private class ScanAsyncFunc {
 		private final String zipsCallable;
 		private final StoreType storeType;
 		
-		ScanRunnable(String zipsCallable, StoreType storeType) {
+		ScanAsyncFunc(String zipsCallable, StoreType storeType) {
 			this.zipsCallable = zipsCallable;
 			this.storeType = storeType;
 		}
 
-		@Override
-		public void run() {
+		private ListenableFuture<List<Map<String, JSONObject>>> call() {
 			Timestamp now = new Timestamp(System.currentTimeMillis());
 			while ((user.getRunning() > 0 || admin.getRunning() > 0) && now.getTime()
 					- user.getLastRun().getTime() < RUN_TIMEOUT) {
-				logger.log(Level.INFO, "waiting for the job to complete... running: " + user.getRunning(), user);
+				logger.log(Level.INFO, "waiting for the job to complete... running: " + user.getRunning()
+						+ admin.getRunning(), user);
 				// Periodicaly check
 				try {
 					Thread.sleep(1000 * 30);
@@ -335,9 +370,10 @@ public class AlphaDealActions {
 					logger.log(Level.INFO, "Failed to sleep and skipping... ", e);
 				} // check every 30 seconds.
 				AlphaDealUser newUser = uDao.findById(userId);
+				AlphaDealUser newAdmin = uDao.findById("metocomp@gmail.com");
 				logger.log(Level.INFO, "See if running in new user: " + newUser.getRunning(), newUser);
 				user.setRunning(newUser.getRunning());
-				admin = uDao.findById("metocomp@gmail.com");
+				admin.setRunning(newAdmin.getRunning());
 				now = new Timestamp(System.currentTimeMillis());
 			}
 			user.setUserId(userId);
@@ -349,12 +385,12 @@ public class AlphaDealActions {
 					item, zipsArr.length));  
 			int i = 0;
 			ListeningExecutorService service =
-					MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(20));
+					MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
 			List<String> subZips = new ArrayList<String>();
 			List<ListenableFuture<Map<String, JSONObject>>> futureList =
 					new ArrayList<ListenableFuture<Map<String, JSONObject>>>();
 			for (String zip : zipsArr) {
-				if (i < 100) {
+				if ((i % 100 > 0 )|| (i == 0)) {
 					subZips.add(zip);
 					if (i == zipsArr.length - 1) {
 						ListenableFuture<Map<String, JSONObject>> future = null;
@@ -365,7 +401,6 @@ public class AlphaDealActions {
 						}
 						futureList.add(future);
 				     }
-					i++;
 				} else {
 					ListenableFuture<Map<String, JSONObject>> future = null;
 					if (storeType == StoreType.WALMART) {
@@ -375,24 +410,36 @@ public class AlphaDealActions {
 					}
 					futureList.add(future);
 					subZips = new ArrayList<String>();
-					i = 0;
 				}
+				++i;
 			}
 			ListenableFuture<List<Map<String, JSONObject>>> successfulFutures =
 					Futures.allAsList(futureList);
-			Futures.addCallback(successfulFutures, new SendResultCallback());
+			Futures.addCallback(successfulFutures, new SendResultCallback(storeType));
+			return successfulFutures;
 		}
 		
 	}
 	
 	private class SendResultCallback implements FutureCallback<List<Map<String, JSONObject>>> {
+		
+		private final StoreType type;
+		
+		private SendResultCallback(StoreType type) {
+			this.type = type;
+		}
 
 		@Override
 		public void onFailure(Throwable e1) {
 			// Still send result;
 			try {
 				logger.log(Level.WARNING, "Failed to send result", e1);
-				sendResult(new HashMap<String, JSONObject>());
+				if (!isTrigger.equals(PER_ZIP)) {
+					sendResult(new HashMap<String, JSONObject>(), type);
+				} else {
+					user.setRunning(0);
+					uDao.update(user);
+				}
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -407,7 +454,9 @@ public class AlphaDealActions {
 				for (Map<String, JSONObject> m : result) {
 					storesMap.putAll(m);	
 				}
-				sendResult(storesMap);
+				if (!isTrigger.equals(PER_ZIP)) {
+					sendResult(storesMap, type);
+				}
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -430,6 +479,9 @@ public class AlphaDealActions {
 			for (String zip : zips) {
 				try {
 					JSONObject data = getTargetStoreData(item, zip);
+					if (data == null) {
+						return m;
+					}
 					if (upc == null) {
 						upc = "";
 					}
@@ -439,9 +491,13 @@ public class AlphaDealActions {
 					}
 					JSONArray stores = products.getJSONObject(0).getJSONArray("locations");
 					for (int i = 0; i < stores.length(); i++) {
-						String status = stores.getJSONObject(i).getString("availability_status");
+						JSONObject store = stores.getJSONObject(i);
+						String status = store.getString("availability_status");
 						if (status != null && status.indexOf("IN_STOCK") >= 0) {
-							m.put(stores.getJSONObject(i).getString("location_id"), stores.getJSONObject(i));
+							String location = store.getString("location_id");
+							String price = getTargetPrice(location, item);
+							store.put("price", price);
+							m.put(location, store);
 						}
 					}
 				} catch (Exception e) {
@@ -469,13 +525,24 @@ public class AlphaDealActions {
 			for (String zip : zips) {
 				try {
 					JSONObject data = getWalmartStoreData(item, getLocation(zip));
+					if (data == null) {
+						return m;
+					}
 					if (upc == null) {
 						upc = data.getJSONObject("item").getString("upc");
 					}
 					JSONArray stores = data.getJSONArray("stores");
+					if (isTrigger.equals(PER_ZIP)) {
+						// per zip
+						JSONObject storesWrapper = new JSONObject();
+						storesWrapper.put("stores", stores);
+						m.put(zip, storesWrapper);
+						continue;
+					} 
 					for (int i = 0; i < stores.length(); i++) {
 						String status = stores.getJSONObject(i).getString("stockStatus");
 						if (status != null && status.indexOf("Out of stock") < 0) {
+							// per store id
 							m.put(stores.getJSONObject(i).getString("storeId"), stores.getJSONObject(i));
 						}
 					}

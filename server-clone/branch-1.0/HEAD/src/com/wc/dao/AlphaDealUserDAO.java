@@ -97,16 +97,16 @@ public class AlphaDealUserDAO  {
 	 @throws RuntimeException if the operation fails
 	 */
     public AlphaDealUser update(AlphaDealUser entity) {
-    				EntityManagerHelper.log("updating AlphaDeaulUser instance", Level.INFO, null);
-	        try {
-	        	getEntityManager().getTransaction().begin();
+		EntityManagerHelper.log("updating AlphaDeaulUser instance", Level.INFO, null);
+        try {
+        	getEntityManager().getTransaction().begin();
             AlphaDealUser result = getEntityManager().merge(entity);
             getEntityManager().getTransaction().commit();
-            			EntityManagerHelper.log("update successful", Level.INFO, null);
-	            return result;
+			EntityManagerHelper.log("update successful", Level.INFO, null);
+            return result;
         } catch (RuntimeException re) {
-        				EntityManagerHelper.log("update failed", Level.SEVERE, re);
-	            throw re;
+			EntityManagerHelper.log("update failed", Level.SEVERE, re);
+            throw re;
         }
     }
     
@@ -123,7 +123,7 @@ public class AlphaDealUserDAO  {
 			EntityManagerHelper.log("find failed", Level.SEVERE, re);
             return null;
         } finally {
-        	if (mg != null) mg.close();
+        	if (mg != null && mg.isOpen()) mg.close();
         }
     }    
 }
